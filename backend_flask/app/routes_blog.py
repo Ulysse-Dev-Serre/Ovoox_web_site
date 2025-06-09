@@ -6,6 +6,7 @@ from app.models import Article, Product
 from datetime import datetime
 from sqlalchemy import func # Import nécessaire pour utiliser func.count() et func.lower()
 from sqlalchemy import or_
+from urllib.parse import unquote
 
 blog_bp = Blueprint('blog_bp', __name__, url_prefix='/api/blog')
 
@@ -26,24 +27,32 @@ def serialize_product(product):
 # 1. Route pour OBTENIR TOUS les articles (LISTE) - Supporte le filtrage par catégorie (insensible à la casse)
 # 1. Route pour OBTENIR TOUS les articles (LISTE) - Supporte le filtrage par catégorie (insensible à la casse)
 # 1. Route pour OBTENIR TOUS les articles (LISTE) - Supporte le filtrage par catégorie (insensible à la casse)
+# app/routes_blog.py
+
+# ... vos autres imports ...
+
 @blog_bp.route('/articles', methods=['GET'])
 def get_articles_list():
-    category = request.args.get('category') # Récupère le paramètre 'category' de l'URL
+    # On récupère la catégorie, qui est encore encodée
+    category_encoded = request.args.get('category')
     
-    query = Article.query # Commence avec la requête de base
+    query = Article.query
 
-    if category:
-        # Convertit la catégorie de la requête en minuscules
-        search_category_lower = category.lower()
-        
-        # Filtre les articles en convertissant aussi la catégorie de la DB en minuscules pour la comparaison
-        query = query.filter(
-            func.lower(Article.category) == search_category_lower
-        )
+    if category_encoded:
+        # ======================= LA CORRECTION FINALE =======================
+        #
+        # On décode manuellement la chaîne pour la nettoyer.
+        # 'sant%C3%A9...' devient 'santé & bien-être'
+        #
+        category_decoded = unquote(category_encoded)
+        #
+        # ====================================================================
+
+        # Maintenant, la comparaison avec collate('NOCASE') fonctionnera parfaitement
+        # car elle comparera deux chaînes de caractères propres.
+        query = query.filter(Article.category.collate('NOCASE') == category_decoded)
     
-    # TRIER TOUJOURS PAR DATE DÉCROISSANTE ---
     articles = query.order_by(Article.date.desc()).all()
-    # -------------------------------------------------------------
     
     return jsonify([serialize_article(article) for article in articles])
 
@@ -165,7 +174,4 @@ def get_recent_posts():
     return jsonify([serialize_article(article) for article in recent_articles])
 
 
-# ====================================================================
-# Routes pour les produits e-commerce (inchangées)
-# ====================================================================
 
